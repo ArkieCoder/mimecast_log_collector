@@ -93,7 +93,11 @@ def write_file(file_name, data_to_write, binary=False):
       encoding = None ## binary files can't take encoding
 
     with open(file_name, file_mode, encoding=encoding) as f:
-      f.write(data_to_write)
+      if(binary):
+        for chunk in data_to_write.iter_content():
+          f.write(chunk)
+      else:
+        f.write(data_to_write)
   except Exception as e:
     log.error(
       "Error writing file %s. Cannot Continue. Exception: %s" % (
@@ -109,9 +113,9 @@ def delete_file(file_name):
     os.remove(file_name)
   except Exception as e:
     log.error(
-      "Error deleting file "
-      + file_name
-      + ". Cannot continue. Exception: "
-      + str(e)
+      "Error deleting file %s. Cannot continue. Exception: %s" % (
+        file_name,
+        str(e)
+      )
     )
     quit()
