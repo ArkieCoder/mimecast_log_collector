@@ -5,12 +5,12 @@ import time
 from mimecast.logger import log, syslogger, write_file, read_file
 from dateutil.parser import parse
 from zipfile import ZipFile
+from datetime import datetime
 
 # Declare the type of event we want to ingest
 event_type = "/api/audit/get-siem-logs"
 connection = Mimecast(event_type)
 interval_time = configuration.logging_details["INTERVAL_TIMER"]
-
 
 def init_directory():
   if not os.path.exists(configuration.logging_details["LOG_FILE_PATH"]):
@@ -21,6 +21,43 @@ def send_file_to_syslog(filename):
     lines = log_file.read().splitlines()
     for line in lines:
       syslogger.info(line)
+
+def get_datedir_from_filename(file_name):
+  file_name_end = file_name.split("_")[-1]
+  file_date_dir = file_name_end.split(".")[0][0:8]
+  return file_date_dir
+
+def get_full_datedir_from_filename(file_name):
+  file_date_dir = get_datedir_from_filename(file_name)
+  full_dir = os.path.join(
+    configuration.logging_details["LOG_FILE_PATH"], file_date_dir
+  )
+  return full_dir
+
+def set_file_ts(full_log_path):
+  file_name = os.path.basename(full_log_path)
+  file_ts = parse(get_datedir_from_filename(file_name)).timestamp()
+  os.utime(full_log_path, (file_ts, file_ts))
+
+def store_log(file_name, data_to_send, compression_enabled=False):
+  full_dir = ""
+  if(compression_enabled):
+    full_dir = "/tmp/mimecast_log_collector/%s" % datetime.now().strftime("%Y%m%d")
+  else:
+    full_dir = get_full_datedir_from_filename(file_name)
+
+  # Create the directory if it doesn't exist
+  if not os.path.exists(full_dir):
+    os.makedirs(full_dir)
+
+  # Save file to log file path
+  full_log_path = os.path.join(full_dir, file_name)
+  write_file(full_log_path, data_to_send, compression_enabled)
+
+  if(not(compression_enabled)):
+    set_file_ts(full_log_path)
+
+  return(full_log_path, full_dir)
 
 def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
   # Set checkpoint file name to store page token
@@ -69,27 +106,12 @@ def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
       try:
         file_name = resp_headers["Content-Disposition"].split('="')
         file_name = file_name[1][:-1]
-        file_name_end = file_name.split("_")[-1]
-
-        file_date_dir = file_name_end.split(".")[0][0:8]
-        full_dir = os.path.join(
-          configuration.logging_details["LOG_FILE_PATH"], file_date_dir
-        )
-
-        if not os.path.exists(full_dir):
-          os.makedirs(full_dir)
-
-        # Save file to log file path
-        full_log_path = os.path.join(full_dir, file_name)
 
         data_to_send = resp_body
         if(compression_enabled):
           data_to_send = resp
 
-        ## ensure that file is written as binary if compression is enabled
-        write_file(full_log_path, data_to_send, compression_enabled)
-        file_ts = parse(file_date_dir).timestamp()
-        os.utime(full_log_path, (file_ts, file_ts))
+        (full_log_path, full_dir) = store_log(file_name, data_to_send, compression_enabled)
 
         # Save mc-siem-token page token to check point directory
         write_file(checkpoint_filename, resp_headers["mc-siem-token"])
@@ -105,9 +127,12 @@ def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
 
             if(compression_enabled):
               with ZipFile(full_log_path) as zip:
-                zip.extractall(path=full_dir)
                 for name in zip.namelist():
-                  send_file_to_syslog(name)
+                  extract_path = get_full_datedir_from_filename(name)
+                  full_extracted_path = os.path.join(extract_path, name)
+                  zip.extract(name, path=extract_path)
+                  send_file_to_syslog(full_extracted_path)
+                  set_file_ts(full_extracted_path)
             else:
               send_file_to_syslog(full_log_path)
 
