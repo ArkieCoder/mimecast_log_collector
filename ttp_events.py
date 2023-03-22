@@ -52,7 +52,7 @@ def Get_TTPURL_events(base_url, access_key, secret_key):
 
       # Forward each event individually
       for row in resp_body:
-        row = json.dumps(json.loads(row))
+        row = json.dumps(row)
 
         try:
           if configuration.syslog_details["syslog_output"] is True:
