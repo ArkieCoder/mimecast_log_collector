@@ -44,8 +44,9 @@ def get_audit_events(base_url, access_key, secret_key):
 
   # Process response
   if resp != "error":
-    resp_body = resp[0]
-    resp_headers = resp[1]
+    resp_body = resp.text
+    resp_headers = resp.headers
+
     content_type = resp_headers["Content-Type"]
 
     # No more TTP events available
