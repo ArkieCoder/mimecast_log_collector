@@ -131,6 +131,7 @@ def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
                   extract_path = get_full_datedir_from_filename(name)
                   full_extracted_path = os.path.join(extract_path, name)
                   zip.extract(name, path=extract_path)
+                  log.info("Sending %s to syslog" % full_extracted_path)
                   send_file_to_syslog(full_extracted_path)
                   set_file_ts(full_extracted_path)
             else:
