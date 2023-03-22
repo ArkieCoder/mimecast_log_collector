@@ -1,2 +1,3 @@
 __pycache__/*
 mimecast/__pycache__
+*.pyc
