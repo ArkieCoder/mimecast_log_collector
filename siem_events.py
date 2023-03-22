@@ -92,7 +92,7 @@ def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
               "Loading file: %s to output to %s:%s" % (
                 full_log_path,
                 configuration.syslog_details["syslog_server"],
-                str(configuration.syslog_details["syslog_port"]
+                str(configuration.syslog_details["syslog_port"])
               )
             )
 
