@@ -62,7 +62,7 @@ def store_log(file_name, data_to_send, compression_enabled=False):
 def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
   # Set checkpoint file name to store page token
   checkpoint_filename = os.path.join(checkpoint_dir, "get_mta_siem_logs_checkpoint")
-  compression_enabled = configuration.logging_details["USE_COMPRESSION_WHERE_POSSIBLE"]
+  compression_enabled = configuration.logging_details.get("USE_COMPRESSION_WHERE_POSSIBLE")
 
   # Build post body for request
   post_body = {
