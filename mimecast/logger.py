@@ -86,10 +86,13 @@ def append_file(file_name, data_to_write):  # Do not append duplicate data to fi
 def write_file(file_name, data_to_write, binary=False):
   try:
     file_mode = "w"
+    encoding = "utf-8"
+
     if(binary):
       file_mode = "wb"
+      encoding = None ## binary files can't take encoding
 
-    with open(file_name, file_mode, encoding="utf-8") as f:
+    with open(file_name, file_mode, encoding=encoding) as f:
       f.write(data_to_write)
   except Exception as e:
     log.error(
