@@ -10,7 +10,7 @@ was forthcoming.
 ## Motivation ##
 
 **JSON parsing issue [FIXED]** - The TTP and Audit endpoints were returning JSON that was not being parsed correctly.
-I documented this issue [here](https://github.com/JoshuaSmeda/mimecast_log_collector/issues/13)
+I documented this issue [here](https://github.com/JoshuaSmeda/mimecast_log_collector/issues/13).
 
 **SIEM module large filecount per directory [FIXED]** - I didn't submit an issue for this one.  The issue is that
 the script generates a large amount of files in the directory it points to for SIEM logs, so much so that normal
@@ -36,9 +36,9 @@ difficult to choose an interval that wouldn't collide with the next run.
 Supports the following Mimecast endpoints:
 
 ```
-get_siem_logs <br>
-get_ttp_urls <br>
-get_auth_logs <br>
+/api/audit/get-siem-logs
+/api/ttp/url/get-logs
+/api/audit/get-audit-events
 ```
 
 ## Documentation:
@@ -71,4 +71,5 @@ If you are experiencing high CPU usage - increase the interval time in `configur
 ## Contact
 
 Primary developer - ArkieCoder
+
 Contact is via GitHub Issues
