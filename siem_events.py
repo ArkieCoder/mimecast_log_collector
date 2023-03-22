@@ -82,12 +82,8 @@ def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
         # Save file to log file path
         full_log_path = os.path.join(full_dir, file_name)
 
-        data_to_write = resp_body
-        if(compression_enabled):
-          data_to_write = resp
-
         ## ensure that file is written as binary if compression is enabled
-        write_file(full_log_path, data_to_write, compression_enabled)
+        write_file(full_log_path, resp_body, compression_enabled)
         file_ts = parse(file_date_dir).timestamp()
         os.utime(full_log_path, (file_ts, file_ts))
 
