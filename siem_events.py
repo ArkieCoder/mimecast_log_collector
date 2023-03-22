@@ -57,7 +57,7 @@ def store_log(file_name, data_to_send, compression_enabled=False):
   if(not(compression_enabled)):
     set_file_ts(full_log_path)
 
-  return(full_log_path, full_dir)
+  return full_log_path
 
 def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
   # Set checkpoint file name to store page token
@@ -111,7 +111,7 @@ def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
         if(compression_enabled):
           data_to_send = resp
 
-        (full_log_path, full_dir) = store_log(file_name, data_to_send, compression_enabled)
+        full_log_path = store_log(file_name, data_to_send, compression_enabled)
 
         # Save mc-siem-token page token to check point directory
         write_file(checkpoint_filename, resp_headers["mc-siem-token"])
@@ -134,6 +134,8 @@ def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
                   log.info("Sending %s to syslog" % full_extracted_path)
                   send_file_to_syslog(full_extracted_path)
                   set_file_ts(full_extracted_path)
+
+              os.unlink(full_log_path)
             else:
               send_file_to_syslog(full_log_path)
 
