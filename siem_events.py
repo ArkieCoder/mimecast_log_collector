@@ -4,6 +4,7 @@ import os
 import time
 from mimecast.logger import log, syslogger, write_file, read_file
 from dateutil.parser import parse
+from zipfile import ZipFile
 
 # Declare the type of event we want to ingest
 event_type = "/api/audit/get-siem-logs"
@@ -15,15 +16,25 @@ def init_directory():
   if not os.path.exists(configuration.logging_details["LOG_FILE_PATH"]):
     os.makedirs(configuration.logging_details["LOG_FILE_PATH"])
 
+def send_file_to_syslog(filename):
+  with open(filename, "r") as log_file:
+    lines = log_file.read().splitlines()
+    for line in lines:
+      syslogger.info(line)
 
 def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
   # Set checkpoint file name to store page token
   checkpoint_filename = os.path.join(checkpoint_dir, "get_mta_siem_logs_checkpoint")
+  compression_enabled = configuration.logging_details["USE_COMPRESSION_WHERE_POSSIBLE"]
 
   # Build post body for request
-  post_body = dict()
-  post_body["data"] = [{}]
-  post_body["data"][0]["type"] = "MTA"
+  post_body = {
+    "data": [{
+      "type": "MTA",
+      "compress": compression_enabled
+    }]
+  }
+
   if os.path.exists(checkpoint_filename):
     post_body["data"][0]["token"] = read_file(checkpoint_filename)
 
@@ -63,29 +74,36 @@ def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
         full_dir = os.path.join(
           configuration.logging_details["LOG_FILE_PATH"], file_date_dir
         )
+
         if not os.path.exists(full_dir):
           os.makedirs(full_dir)
+
         # Save file to log file path
-        write_file(os.path.join(full_dir, file_name), resp_body)
+        full_log_path = os.path.join(full_dir, file_name)
+        write_file(full_log_path, resp_body)
         file_ts = parse(file_date_dir).timestamp()
-        os.utime(os.path.join(full_dir, file_name), (file_ts, file_ts))
+        os.utime(full_log_path, (file_ts, file_ts))
 
         # Save mc-siem-token page token to check point directory
         write_file(checkpoint_filename, resp_headers["mc-siem-token"])
         try:
           if configuration.syslog_details["syslog_output"] is True:
             log.info(
-              "Loading file: "
-              + os.path.join(full_dir, file_name)
-              + " to output to "
-              + configuration.syslog_details["syslog_server"]
-              + ":"
-              + str(configuration.syslog_details["syslog_port"])
+              "Loading file: %s to output to %s:%s" % (
+                full_log_path,
+                configuration.syslog_details["syslog_server"],
+                str(configuration.syslog_details["syslog_port"]
+              )
             )
-            with open(os.path.join(full_dir, file_name), "r") as log_file:
-              lines = log_file.read().splitlines()
-              for line in lines:
-                syslogger.info(line)
+
+            if(compression_enabled):
+              with ZipFile(full_log_path) as zip:
+                zip.extractall(path=full_dir)
+                for name in zip.namelist():
+                  send_file_to_syslog(name)
+            else:
+              send_file_to_syslog(full_log_path)
+
             log.info("Syslog output completed for file " + file_name)
         except Exception as e:
           log.error(
