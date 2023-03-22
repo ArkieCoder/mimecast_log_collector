@@ -79,7 +79,7 @@ def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
           os.makedirs(full_dir)
 
         # Save file to log file path
-        full_log_path = os.path.join(full_dir, file_name)
+        full_log_path = os.path.join(full_dir, os.path.basename(file_name))
         write_file(full_log_path, resp_body)
         file_ts = parse(file_date_dir).timestamp()
         os.utime(full_log_path, (file_ts, file_ts))
