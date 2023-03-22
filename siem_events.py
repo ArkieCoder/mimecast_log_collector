@@ -45,9 +45,9 @@ def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
 
   # Process response
   if resp != "error":
-    resp_body = resp[0]
-    resp_headers = resp[1]
-    resp_status = resp[2]
+    resp_body = resp.text
+    resp_headers = resp.headers
+    resp_status = resp.status_code
     content_type = resp_headers["Content-Type"]
 
     if resp_status == 429:
@@ -82,8 +82,12 @@ def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
         # Save file to log file path
         full_log_path = os.path.join(full_dir, file_name)
 
+        data_to_send = resp_body
+        if(compression_enabled):
+          data_to_send = resp
+
         ## ensure that file is written as binary if compression is enabled
-        write_file(full_log_path, resp_body, compression_enabled)
+        write_file(full_log_path, data_to_send, compression_enabled)
         file_ts = parse(file_date_dir).timestamp()
         os.utime(full_log_path, (file_ts, file_ts))
 

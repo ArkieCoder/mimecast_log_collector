@@ -61,11 +61,10 @@ class Mimecast:
     # Handle error from API
     if r.status_code != 200:
       log.error(
-        "Request returned with status code: "
-        + str(r.status_code)
-        + ", response body: "
-        + r.text
-        + ". Cannot continue."
+        "Request returned with status code: %s, response body: %s. Cannot continue." % (
+          str(r.status_code),
+          r.text
+        )
       )
       quit()
 
@@ -89,22 +88,19 @@ class Mimecast:
     # Create variables required for request headers
     request_id = str(uuid.uuid4())
     request_date = get_hdr_date()
-    signature = (
-      "MC "
-      + access_key
-      + ":"
-      + self.create_signature(
-        ":".join(
-          [
-            request_date,
-            request_id,
-            uri,
-            configuration.authentication_details["APP_KEY"],
-          ]
-        ),
+    signature = "MC %s:%s" % (
+      access_key,
+      self.create_signature(
+        ":".join([
+          request_date,
+          request_id,
+          uri,
+          configuration.authentication_details["APP_KEY"],
+        ]),
         secret_key,
       )
     )
+
     headers = {
       "Authorization": signature,
       "x-mc-app-id": configuration.authentication_details["APP_ID"],
@@ -115,11 +111,11 @@ class Mimecast:
     try:
       # Send request to API
       log.debug(
-        "Sending request to https://"
-        + base_url
-        + self.event_type
-        + " with request Id: "
-        + request_id
+        "Sending request to https://%s%s with request Id: %s" % (
+          base_url,
+          self.event_type,
+          request_id
+        )
       )
       r = requests.post(
         url="https://" + base_url + uri,
@@ -135,15 +131,13 @@ class Mimecast:
     # Handle errors from API
     if r.status_code != 200:
       log.error(
-        "Request to "
-        + uri
-        + " with , request id: "
-        + request_id
-        + " returned with status code: "
-        + str(r.status_code)
-        + ", response body: "
-        + r.text
+        "Request to %s with request id: %s returned with status code: %s, response body: %s" % (
+          uri,
+          request_id,
+          str(r.status_code),
+          r.text
+        )
       )
 
     # Return response body and response headers
-    return r.text, r.headers, r.status_code
+    return r
