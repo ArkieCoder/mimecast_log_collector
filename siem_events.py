@@ -4,108 +4,190 @@ import os
 import time
 from mimecast.logger import log, syslogger, write_file, read_file
 from dateutil.parser import parse
+from zipfile import ZipFile
+from datetime import datetime
 
 # Declare the type of event we want to ingest
-event_type = '/api/audit/get-siem-logs'
+event_type = "/api/audit/get-siem-logs"
 connection = Mimecast(event_type)
-interval_time = configuration.logging_details['INTERVAL_TIMER']
+interval_time = configuration.logging_details["INTERVAL_TIMER"]
 
 def init_directory():
-  if not os.path.exists(configuration.logging_details['LOG_FILE_PATH']):
-    os.makedirs(configuration.logging_details['LOG_FILE_PATH'])
+  if not os.path.exists(configuration.logging_details["LOG_FILE_PATH"]):
+    os.makedirs(configuration.logging_details["LOG_FILE_PATH"])
+
+def send_file_to_syslog(filename):
+  with open(filename, "r") as log_file:
+    lines = log_file.read().splitlines()
+    for line in lines:
+      syslogger.info(line)
+
+def get_datedir_from_filename(file_name):
+  file_name_end = file_name.split("_")[-1]
+  file_date_dir = file_name_end.split(".")[0][0:8]
+  return file_date_dir
+
+def get_full_datedir_from_filename(file_name):
+  file_date_dir = get_datedir_from_filename(file_name)
+  full_dir = os.path.join(
+    configuration.logging_details["LOG_FILE_PATH"], file_date_dir
+  )
+  return full_dir
+
+def set_file_ts(full_log_path):
+  file_name = os.path.basename(full_log_path)
+  file_ts = parse(get_datedir_from_filename(file_name)).timestamp()
+  os.utime(full_log_path, (file_ts, file_ts))
+
+def store_log(file_name, data_to_send, compression_enabled=False):
+  full_dir = ""
+  if(compression_enabled):
+    full_dir = "/tmp/mimecast_log_collector/%s" % datetime.now().strftime("%Y%m%d")
+  else:
+    full_dir = get_full_datedir_from_filename(file_name)
+
+  # Create the directory if it doesn't exist
+  if not os.path.exists(full_dir):
+    os.makedirs(full_dir)
+
+  # Save file to log file path
+  full_log_path = os.path.join(full_dir, file_name)
+  write_file(full_log_path, data_to_send, compression_enabled)
+
+  if(not(compression_enabled)):
+    set_file_ts(full_log_path)
+
+  return full_log_path
 
 def get_mta_siem_logs(checkpoint_dir, base_url, access_key, secret_key):
-    # Set checkpoint file name to store page token
-    checkpoint_filename = os.path.join(checkpoint_dir, 'get_mta_siem_logs_checkpoint')
+  # Set checkpoint file name to store page token
+  checkpoint_filename = os.path.join(checkpoint_dir, "get_mta_siem_logs_checkpoint")
+  compression_enabled = configuration.logging_details.get("USE_COMPRESSION_WHERE_POSSIBLE")
 
-    # Build post body for request
-    post_body = dict()
-    post_body['data'] = [{}]
-    post_body['data'][0]['type'] = 'MTA'
-    if os.path.exists(checkpoint_filename):
-        post_body['data'][0]['token'] = read_file(checkpoint_filename)
+  # Build post body for request
+  post_body = {
+    "data": [{
+      "type": "MTA",
+      "compress": compression_enabled
+    }]
+  }
 
-    # Send request to API
-    resp = connection.post_request(base_url, event_type, post_body, access_key, secret_key)
+  if os.path.exists(checkpoint_filename):
+    post_body["data"][0]["token"] = read_file(checkpoint_filename)
 
-    # Process response
-    if resp != 'error':
-        resp_body = resp[0]
-        resp_headers = resp[1]
-        resp_status = resp[2]
-        content_type = resp_headers['Content-Type']
+  # Send request to API
+  resp = connection.post_request(
+    base_url, event_type, post_body, access_key, secret_key
+  )
 
-        
-        if resp_status == 429:
-          log.warn('Rate limit hit. Sleeping for %s' % str(resp_headers['X-RateLimitReset']))
-          rate_limit = (int(resp_headers['X-RateLimit-Reset']) / 1000 % 60)
-          time.sleep(rate_limit * 20)
+  # Process response
+  if resp != "error":
+    resp_body = resp.text
+    resp_headers = resp.headers
+    resp_status = resp.status_code
+    content_type = resp_headers["Content-Type"]
 
-        # End if response is JSON as there is no log file to download
-        if content_type == 'application/json':
-            log.info('No more SIEM logs available - Resting for 60 seconds')
-            time.sleep(60)
-            return True
+    if resp_status == 429:
+      log.warn(
+        "Rate limit hit. Sleeping for %s"
+        % str(resp_headers["X-RateLimitReset"])
+      )
+      rate_limit = int(resp_headers["X-RateLimit-Reset"]) / 1000 % 60
+      time.sleep(rate_limit * 20)
 
-        # Process log file
-        elif content_type == 'application/octet-stream':
-          try:
-            file_name = resp_headers['Content-Disposition'].split('=\"')
-            file_name = file_name[1][:-1]
-            file_name_end = file_name.split('_')[-1]
-            file_date_dir = file_name_end.split('.')[0][0:8]
-            full_dir = os.path.join(configuration.logging_details['LOG_FILE_PATH'], file_date_dir)
-            if not os.path.exists(full_dir):
-              os.makedirs(full_dir)
-            # Save file to log file path
-            write_file(os.path.join(full_dir, file_name), resp_body)
-            file_ts = parse(file_date_dir).timestamp()
-            os.utime(os.path.join(full_dir, file_name), (file_ts, file_ts))
+    # End if response is JSON as there is no log file to download
+    if content_type == "application/json":
+      log.info("No more SIEM logs available - Resting for 60 seconds")
+      time.sleep(60)
+      return True
 
-            # Save mc-siem-token page token to check point directory
-            write_file(checkpoint_filename, resp_headers['mc-siem-token'])
-            try:
-                if configuration.syslog_details['syslog_output'] is True:
-                    log.info('Loading file: ' + os.path.join(full_dir, file_name) + ' to output to ' + configuration.syslog_details['syslog_server'] + ':' + str(configuration.syslog_details['syslog_port']))
-                    with open(os.path.join(full_dir, file_name), 'r') as log_file:
-                        lines = log_file.read().splitlines()
-                        for line in lines:
-                            syslogger.info(line)
-                    log.info('Syslog output completed for file ' + file_name)
-            except Exception as e:
-                log.error('Unexpected error writing to syslog. Exception: ' + str(e))
+    # Process log file
+    elif content_type == "application/octet-stream":
+      try:
+        file_name = resp_headers["Content-Disposition"].split('="')
+        file_name = file_name[1][:-1]
 
-            
-            # return true to continue loop
-            return True
+        data_to_send = resp_body
+        if(compression_enabled):
+          data_to_send = resp
 
-          except Exception as e:
-            return True # continue loop
-                            
-        else:
-            # Handle errors
-            log.error('Unexpected response')
-            for header in resp_headers:
-                log.error(header)
-            return False
+        full_log_path = store_log(file_name, data_to_send, compression_enabled)
+
+        # Save mc-siem-token page token to check point directory
+        write_file(checkpoint_filename, resp_headers["mc-siem-token"])
+        try:
+          if configuration.syslog_details["syslog_output"] is True:
+            log.info(
+              "Loading file: %s to output to %s:%s" % (
+                full_log_path,
+                configuration.syslog_details["syslog_server"],
+                str(configuration.syslog_details["syslog_port"])
+              )
+            )
+
+            if(compression_enabled):
+              with ZipFile(full_log_path) as zip:
+                for name in zip.namelist():
+                  extract_path = get_full_datedir_from_filename(name)
+                  full_extracted_path = os.path.join(extract_path, name)
+                  zip.extract(name, path=extract_path)
+                  log.info("Sending %s to syslog" % full_extracted_path)
+                  send_file_to_syslog(full_extracted_path)
+                  set_file_ts(full_extracted_path)
+
+              os.unlink(full_log_path)
+            else:
+              send_file_to_syslog(full_log_path)
+
+            log.info("Syslog output completed for file " + file_name)
+        except Exception as e:
+          log.error(
+            "Unexpected error writing to syslog. Exception: " + str(e)
+          )
+
+        # return true to continue loop
+        return True
+
+      except Exception as e:
+        return True   # continue loop
+
+    else:
+      # Handle errors
+      log.error("Unexpected response")
+      for header in resp_headers:
+        log.error(header)
+      return False
 
 
 def get_siem_logs():
-    try:
-        base_url = connection.get_base_url(configuration.authentication_details['EMAIL_ADDRESS'])
-        print(base_url)
-    except Exception:
-        log.error('Error discovering base url for %s. Please double check configuration.py' % (configuration.authentication_details['EMAIL_ADDRESS']))
-        quit()
-
-    # Request log data in a loop until there are no more logs to collect
-    try:
-        log.info('Getting MTA log data')
-        while get_mta_siem_logs(checkpoint_dir=configuration.logging_details['CHK_POINT_DIR'], base_url=base_url, access_key=configuration.authentication_details['ACCESS_KEY'], secret_key=configuration.authentication_details['SECRET_KEY']) is True:
-            log.info("Getting additional SIEM logs")
-    except Exception as e:
-        log.error('Unexpected error getting MTA logs ' + (str(e)))
+  try:
+    base_url = connection.get_base_url(
+      configuration.authentication_details["EMAIL_ADDRESS"]
+    )
+    print(base_url)
+  except Exception:
+    log.error(
+      "Error discovering base url for %s. Please double check configuration.py"
+      % (configuration.authentication_details["EMAIL_ADDRESS"])
+    )
     quit()
+
+  # Request log data in a loop until there are no more logs to collect
+  try:
+    log.info("Getting MTA log data")
+    while (
+      get_mta_siem_logs(
+        checkpoint_dir=configuration.logging_details["CHK_POINT_DIR"],
+        base_url=base_url,
+        access_key=configuration.authentication_details["ACCESS_KEY"],
+        secret_key=configuration.authentication_details["SECRET_KEY"],
+      )
+      is True
+    ):
+      log.info("Getting additional SIEM logs")
+  except Exception as e:
+    log.error("Unexpected error getting MTA logs " + (str(e)))
+  quit()
 
 
 init_directory()
