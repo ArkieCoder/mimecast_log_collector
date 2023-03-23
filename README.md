@@ -18,7 +18,7 @@ tools like `rm`, `ls`, etc. can't be used directly to manage them, and there's n
 My solution was to put the SIEM logs in directories based on date so that no one directory would have too many
 files, then I created a log rotation script that would remove old logs.
 
-**Compression** - Examples from Mimecast demonstrate how to implement compression when calling their APIs,
+**Compression [ADDED]** - Examples from Mimecast demonstrate how to implement compression when calling their APIs,
 and they mention that using compression reduces the chance of getting rate limited.  I have a requirement
 to implement this compression, so I will be working on that feature.
 
